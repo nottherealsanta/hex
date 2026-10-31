@@ -49,5 +49,7 @@
   <string>Hex reads your calendar on this Mac to remind you before meetings and title their recordings. Nothing leaves your Mac.</string>
   <key>NSMicrophoneUsageDescription</key>
   <string>Hex uses your microphone for private local dictation and does not store the captured audio.</string>
+  <key>NSMotionUsageDescription</key>
+  <string>With AirPods training data on, Hex reads your AirPods' head motion while you dictate, keeps it on this Mac, and uses it to train its speech model. Hex never uses motion to identify you.</string>
 </dict>
 </plist>

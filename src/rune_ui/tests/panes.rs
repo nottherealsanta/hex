@@ -376,6 +376,7 @@ fn contributed_options_are_labs_toggles_off_by_default() {
         "lab-copy-only",
         "lab-spoken-formatting",
         "lab-filler-words",
+        "lab-airpods-training",
     ] {
         assert!(rt.find(row).is_some(), "Labs lacks {row}");
     }
@@ -385,6 +386,9 @@ fn contributed_options_are_labs_toggles_off_by_default() {
     assert!(!rt.state.settings.labs.filler_words);
     tap(&mut rt, "lab-filler-words");
     assert!(rt.state.settings.labs.filler_words);
+    assert!(!rt.state.settings.labs.airpods_training);
+    tap(&mut rt, "lab-airpods-training");
+    assert!(rt.state.settings.labs.airpods_training);
     assert!(rt.find("lab-share-shortcut").is_none(), "Windows only");
     assert!(!rt.state.settings.labs.mouse_shortcuts);
     tap(&mut rt, "lab-mouse-shortcuts");

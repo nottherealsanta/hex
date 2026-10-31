@@ -134,6 +134,8 @@ mod meeting_runtime;
 mod meeting_watcher;
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod microphone_activity;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod motion;
 #[cfg_attr(any(target_os = "linux", target_os = "windows"), allow(dead_code))]
 mod onboarding;
 mod opencode_catalog;
@@ -164,6 +166,12 @@ mod status_item;
 #[cfg(target_os = "macos")]
 mod suppression;
 mod text_replacements;
+#[cfg(target_os = "macos")]
+mod training_capture;
+#[cfg(target_os = "macos")]
+mod training_cli;
+#[cfg(target_os = "macos")]
+mod training_store;
 mod transcript;
 mod transcript_cli;
 #[cfg(target_os = "macos")]
@@ -283,6 +291,12 @@ enum Command {
     Meeting {
         #[command(subcommand)]
         command: MeetingCommand,
+    },
+    /// Labs › AirPods training data: the AirPods' motion with each dictation,
+    /// kept on this Mac as training data.
+    Training {
+        #[command(subcommand)]
+        command: Option<training_cli::TrainingCommand>,
     },
     /// Measure the local transcription runtime against a fixed WAV corpus.
     #[command(hide = true)]
@@ -446,6 +460,11 @@ fn main() -> Result<()> {
         Some(Command::Control(command)) => control::cli::finish(control::cli::run(command)),
         command => Cli { command },
     };
+    // Training data reads and deletes files like `hex history` does, so it
+    // runs before logging, the instance lock, and the GUI.
+    if let Some(Command::Training { command }) = &cli.command {
+        return training_cli::run(command.as_ref());
+    }
     #[cfg(debug_assertions)]
     match &cli.command {
         Some(Command::Meeting {
@@ -513,6 +532,7 @@ fn main() -> Result<()> {
     });
     match command {
         Command::App { device, rune_args } => open_app(event_path, device, rune_args),
+        Command::Training { .. } => unreachable!("handled before startup"),
         Command::Listen { device } => {
             let _instance = instance::acquire("listener")?;
             labs::log_launch();

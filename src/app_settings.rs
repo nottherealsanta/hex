@@ -1348,6 +1348,9 @@ pub struct LabsSettings {
     /// A pasted dictation gets one leading space when the character before
     /// the cursor is one a space belongs after (macOS, issue 632).
     pub smart_spacing: bool,
+    /// Each dictation keeps its AirPods' head motion, together with the
+    /// pasted text, as training data for the speech model (macOS).
+    pub airpods_training: bool,
 }
 
 /// The idle times Labs › Unload model when idle offers, in minutes.
@@ -1371,6 +1374,7 @@ impl Default for LabsSettings {
             subtitle_export: false,
             second_dictation_shortcut: false,
             smart_spacing: false,
+            airpods_training: false,
         }
     }
 }

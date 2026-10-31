@@ -206,6 +206,14 @@ fn rows(ui: &Ui) -> Vec<Row> {
             tr("Copy dictation only"),
             tr("Put the dictation on the clipboard instead of pasting it"),
         ));
+        // CoreMotion's headphone motion is macOS's; the toggle itself is
+        // harmless to flip anywhere, so macOS scene renders keep the row.
+        rows.push(row(
+            Feature::AirPodsTraining,
+            &WAVE,
+            tr("AirPods training data"),
+            tr("Keep each dictation's AirPods head motion, with its text, on this Mac, as training data for the speech model"),
+        ));
         // macOS's listener only, so Linux renders of macOS scenes leave it out.
         if cfg!(target_os = "macos") {
             rows.push(row(
@@ -288,6 +296,7 @@ fn row_key(feature: Feature) -> &'static str {
         Feature::SubtitleExport => "lab-subtitle-export",
         Feature::SecondDictationShortcut => "lab-second-dictation-shortcut",
         Feature::SmartSpacing => "lab-smart-spacing",
+        Feature::AirPodsTraining => "lab-airpods-training",
     }
 }
 

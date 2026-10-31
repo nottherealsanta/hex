@@ -106,6 +106,8 @@ struct InferenceJob {
     prepare_ms: u128,
     target: TranscriptionTarget,
     context: ContextSnapshot,
+    /// Labs › AirPods training data: this dictation's capture, if it has one.
+    training: Option<u64>,
 }
 
 struct ProcessorJob {
@@ -115,6 +117,7 @@ struct ProcessorJob {
     text: String,
     context: ContextSnapshot,
     timings: JobTimings,
+    training: Option<u64>,
 }
 
 /// Pipeline timings carried from inference through output for the final log.
@@ -134,6 +137,8 @@ struct CompletedTranscript {
     application: Option<String>,
     timings: JobTimings,
     processing: Option<ProcessingObservation>,
+    /// Labs › AirPods training data: the capture this paste labels.
+    training: Option<u64>,
 }
 
 enum OutputJob {
@@ -417,10 +422,28 @@ impl DictationWorker {
         let (_, selection) = crate::app_settings::transcription_selection();
         let submitted_at = Instant::now();
         let audio_ms = clip.duration_ms();
+        let audio_window = clip.audio_window();
         let stream = clip.take_stream();
         let _capture = clip.take_capture_marker();
         let samples = clip.into_transcription_samples();
         crate::dictation_diagnostics::persist(&samples);
+        // Labs › AirPods training data: the release stops motion updates and
+        // hands back the clip's window, which is kept only for a paste.
+        let motion = crate::motion::end(audio_window);
+        let training = matches!(
+            target,
+            TranscriptionTarget::Paste | TranscriptionTarget::RawPaste
+        )
+        .then(|| {
+            crate::training_capture::begin(
+                motion,
+                audio_window.map(|(start, _)| start),
+                audio_ms,
+                &samples,
+                self.engine.clone(),
+            )
+        })
+        .flatten();
         let prepare_ms = submitted_at.elapsed().as_millis();
         let offline = {
             let control = control.clone();
@@ -449,6 +472,7 @@ impl DictationWorker {
             prepare_ms,
             target,
             context,
+            training,
         })
         .map(|()| {
             state.next_sequence += 1;
@@ -620,6 +644,9 @@ fn run_processor_worker(
             .recv();
         let Ok(job) = job else { break };
         if job.control.is_cancelled() {
+            if let Some(training) = job.training {
+                crate::training_capture::cancel(training);
+            }
             let _ = output.send(OutputJob::Cancelled { job_id: job.job_id });
             continue;
         }
@@ -631,6 +658,9 @@ fn run_processor_worker(
         });
         processed.apply_transformations(transformations, &job.context, &job.control.cancelled);
         if job.control.is_cancelled() {
+            if let Some(training) = job.training {
+                crate::training_capture::cancel(training);
+            }
             let _ = output.send(OutputJob::Cancelled { job_id: job.job_id });
             continue;
         }
@@ -654,6 +684,7 @@ fn run_processor_worker(
                     application: job.context.application,
                     timings: job.timings,
                     processing: processed.observation,
+                    training: job.training,
                 })),
             })
             .is_err()
@@ -830,6 +861,9 @@ fn run_inference_worker(
             inference_ms: inference_started.elapsed().as_millis(),
         };
         if job.control.is_cancelled() {
+            if let Some(training) = job.training {
+                crate::training_capture::cancel(training);
+            }
             let _ = output.send(OutputJob::Cancelled { job_id: job.job_id });
             continue;
         }
@@ -849,6 +883,7 @@ fn run_inference_worker(
                         text,
                         context: job.context,
                         timings,
+                        training: job.training,
                     })
                     .is_err()
                 {
@@ -863,6 +898,7 @@ fn run_inference_worker(
                     application,
                     timings,
                     processing: None,
+                    training: job.training,
                 });
                 if output
                     .send(OutputJob::Completed {
@@ -1076,9 +1112,15 @@ fn finish_output(
                 }
             }
         }
-        OutputJob::Completed { job_id, .. } | OutputJob::Cancelled { job_id } => {
+        OutputJob::Completed { job_id, result, .. } => {
+            if let Ok(completed) = result.as_ref()
+                && let Some(training) = completed.training
+            {
+                crate::training_capture::cancel(training);
+            }
             WorkerEvent::Cancelled { job_id }
         }
+        OutputJob::Cancelled { job_id } => WorkerEvent::Cancelled { job_id },
         OutputJob::Paste { kind, .. } => {
             let result = match kind {
                 PasteKind::LastTranscript => last_transcript
@@ -1119,6 +1161,11 @@ fn record_history(history: &History, target: TranscriptionTarget, completed: &Co
     };
     if let Err(error) = history.record(draft) {
         tracing::warn!(%error, "could not record dictation history");
+    }
+    // Labs › AirPods training data: the paste already happened, so the label
+    // is final; the capture is written on its own thread.
+    if let Some(training) = completed.training {
+        crate::training_capture::finish(training, &completed.text, &completed.raw);
     }
 }
 
@@ -1363,6 +1410,7 @@ mod tests {
                 prepare_ms: 0,
                 inference_ms: 0,
             },
+            training: None,
         }
     }
 
@@ -1598,6 +1646,7 @@ mod tests {
                 inference_ms: 0,
             },
             processing: None,
+            training: None,
         };
         for cancel_during_preparation in [true, false] {
             let path = std::env::temp_dir().join(format!(

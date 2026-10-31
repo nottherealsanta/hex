@@ -32,6 +32,9 @@ Agents can [read retained transcripts](transcript-cli.md) and
 Its Restore shortcut default toggle (off by default) puts a Restore default
 button beside Paste last dictation's shortcut (#613).
 The [vocabulary](vocabulary.md) biases transcription toward names you list.
+[AirPods training data](training-data.md) (Labs, macOS, off by default) keeps
+each dictation's AirPods head motion with its text, on this Mac, as training
+data for a motion-to-text model.
 [Annotate](capture.md) (macOS, Linux,
 and Windows) records the screen while you draw and talk and sends it to an agent.
 The other capabilities stay here until they need their own verification recipe.

@@ -39,7 +39,8 @@ Meetings (beta), Voice Filter (locked on while its macOS driver is
 installed), Playground, Live text, Live chapters, Vocabulary biasing, Switch
 model with keyboard language (#216), Mouse shortcuts (#209, macOS), Also
 pause the browser (#301, macOS), Share dictation shortcut (#176, Windows),
-Unload model when idle (#442), and Terminal paste (Windows). Externally contributed features land there too.
+Unload model when idle (#442), AirPods training data (macOS), and Terminal
+paste (Windows). Externally contributed features land there too.
 Annotate is a normal feature in every build, stable included, on macOS,
 Linux, and Windows; only developer tools (`dev_build::is_dev_build()` with
 `DEVELOPER_FEATURES_ENABLED`) stay gated to dev builds.
@@ -338,6 +339,16 @@ substitute for source inspection or a second roadmap.
 - `history`: the owner-only bounded retained-dictation store: retention
   windows with hard entry and byte caps, atomic crash-safe persistence, and
   search. Text and bounded metadata only, never audio.
+- `motion`, `training_capture`, `training_store`: Labs › AirPods training
+  data (macOS). `motion_bridge.swift` wraps CoreMotion's headphone motion and
+  `motion` starts and stops it around a capture, reading one clip's window
+  out of the Swift buffer; `training_capture` turns a successful paste into
+  examples (a word pass as engine background work, sentence and long-piece
+  slicing, per-piece quality and a once-per-AirPods-session clock self-check);
+  `training_store` is the owner-only `Training` folder (one folder per
+  example, `motion.csv` + `meta.json`, discard last, purge, 90-day/1 GB
+  retention). `training_cli` is `hex training status|list|delete|purge`. No
+  audio is ever written. Map: [`docs/features/training-data.md`](docs/features/training-data.md).
 - `transcript_cli`: read-only release commands `hex history` and
   `hex meetings list|show|search` on every OS, versioned JSON projections and
   filters.

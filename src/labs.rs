@@ -47,10 +47,11 @@ pub enum Feature {
     SubtitleExport,
     SecondDictationShortcut,
     SmartSpacing,
+    AirPodsTraining,
 }
 
 impl Feature {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::Meetings,
         Self::VoiceFilter,
         Self::Playground,
@@ -71,6 +72,7 @@ impl Feature {
         Self::SubtitleExport,
         Self::SecondDictationShortcut,
         Self::SmartSpacing,
+        Self::AirPodsTraining,
     ];
 
     /// The features this OS has.
@@ -90,6 +92,7 @@ impl Feature {
             | Self::KeepOnClipboard
             | Self::CopyOnly
             | Self::SecondDictationShortcut
+            | Self::AirPodsTraining
             | Self::SmartSpacing => cfg!(target_os = "macos"),
             Self::KeyboardModelSwitching => crate::keyboard_input_sources::available(),
             Self::Playground
@@ -125,6 +128,7 @@ impl Feature {
             Self::SubtitleExport => "subtitle-export",
             Self::SecondDictationShortcut => "second-dictation-shortcut",
             Self::SmartSpacing => "smart-spacing",
+            Self::AirPodsTraining => "airpods-training",
         }
     }
 
@@ -151,6 +155,7 @@ impl Feature {
             Self::SubtitleExport => "labs.subtitle_export",
             Self::SecondDictationShortcut => "labs.second_dictation_shortcut",
             Self::SmartSpacing => "labs.smart_spacing",
+            Self::AirPodsTraining => "labs.airpods_training",
         }
     }
 
@@ -198,6 +203,9 @@ impl Feature {
                 "Another shortcut that dictates like the main one (second_dictation_hotkey), such as a key on an external keyboard"
             }
             Self::SmartSpacing => "Add a space before a dictation pasted right after a word",
+            Self::AirPodsTraining => {
+                "Record your AirPods' head motion with each dictation on this Mac, as training data for the speech model"
+            }
         }
     }
 
@@ -228,6 +236,7 @@ impl Feature {
             Self::SubtitleExport => settings.labs.subtitle_export,
             Self::SecondDictationShortcut => settings.labs.second_dictation_shortcut,
             Self::SmartSpacing => settings.labs.smart_spacing,
+            Self::AirPodsTraining => settings.labs.airpods_training,
         }
     }
 
@@ -253,6 +262,7 @@ impl Feature {
             Self::SubtitleExport => settings.labs.subtitle_export = on,
             Self::SecondDictationShortcut => settings.labs.second_dictation_shortcut = on,
             Self::SmartSpacing => settings.labs.smart_spacing = on,
+            Self::AirPodsTraining => settings.labs.airpods_training = on,
         }
     }
 }
@@ -271,8 +281,9 @@ const SPOKEN_FORMATTING: u32 = 1 << 9;
 const FILLER_WORDS: u32 = 1 << 10;
 const SUBTITLE_EXPORT: u32 = 1 << 11;
 const SMART_SPACING: u32 = 1 << 12;
+const AIRPODS_TRAINING: u32 = 1 << 13;
 /// Unload-idle minutes sit above the switches.
-const MINUTES_SHIFT: u32 = 13;
+const MINUTES_SHIFT: u32 = 14;
 
 /// This process's `labs` switches: unknown until settings load or one is
 /// first read.
@@ -358,6 +369,13 @@ pub fn smart_spacing() -> bool {
     on(SMART_SPACING)
 }
 
+/// Each dictation keeps its AirPods' head motion as training data (macOS;
+/// read as each dictation's capture starts).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn airpods_training() -> bool {
+    on(AIRPODS_TRAINING)
+}
+
 /// How long the speech model may sit unused before the engine unloads it,
 /// while Labs › Unload model when idle is on.
 pub fn unload_idle() -> Option<std::time::Duration> {
@@ -386,6 +404,7 @@ fn encode(settings: &LabsSettings) -> u32 {
         (settings.filler_words, FILLER_WORDS),
         (settings.subtitle_export, SUBTITLE_EXPORT),
         (settings.smart_spacing, SMART_SPACING),
+        (settings.airpods_training, AIRPODS_TRAINING),
     ]
     .into_iter()
     .filter(|(on, _)| *on)

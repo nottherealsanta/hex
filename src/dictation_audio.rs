@@ -318,7 +318,13 @@ impl DictationAudio {
     }
 
     fn start_capture(&self, at: CaptureInstant, kind: CaptureKind) -> Result<bool> {
-        self.call(|reply| Command::Start { at, kind, reply })
+        let started = self.call(|reply| Command::Start { at, kind, reply })?;
+        // Labs › AirPods training data: motion updates run only between a
+        // press and its release (or its discard or cancel).
+        if started {
+            crate::motion::begin();
+        }
+        Ok(started)
     }
 
     pub fn become_intentional(&self, at: CaptureInstant) -> Result<bool> {
@@ -629,6 +635,9 @@ impl Owner {
                 };
                 if let Finish::Transcribe(clip) = &mut finish {
                     clip.set_source(self.clip_source());
+                } else {
+                    // A discarded capture keeps no motion.
+                    crate::motion::abort();
                 }
                 self.state.recording.store(false, Ordering::Release);
                 let _ = reply.send(finish);
@@ -642,6 +651,7 @@ impl Owner {
                     self.input.cancel_open();
                 }
                 self.capture.cancel();
+                crate::motion::abort();
                 self.state.recording.store(false, Ordering::Release);
                 let _ = reply.send(());
             }

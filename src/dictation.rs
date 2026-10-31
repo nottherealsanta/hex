@@ -101,6 +101,9 @@ pub struct DictationClip {
     /// How many leading samples were captured before the press.
     press_samples: usize,
     timeline: ClipTimeline,
+    /// The capture instant of the clip's first sample, when the audio owner
+    /// knew its timeline. Motion and word timings line up from here.
+    audio_start: Option<CaptureInstant>,
     source: Option<Box<ClipSource>>,
     /// The live stream fed with this clip's audio during capture, if any.
     stream: Option<LiveStream>,
@@ -112,6 +115,16 @@ pub struct DictationClip {
 impl DictationClip {
     pub fn duration_ms(&self) -> u64 {
         self.samples.len() as u64 * 1_000 / u64::from(PARAKEET_SAMPLE_RATE)
+    }
+
+    /// The real audio window: when the clip's first sample and its last were
+    /// captured. `None` for a clip with no timeline (a test or a synthetic
+    /// clip), or once [`Self::into_transcription_samples`] took the samples.
+    pub fn audio_window(&self) -> Option<(CaptureInstant, CaptureInstant)> {
+        let start = self.audio_start?;
+        start
+            .checked_add(Duration::from_millis(self.duration_ms()))
+            .map(|end| (start, end))
     }
 
     /// Takes the clip's live stream; finish it with the complete clip.
@@ -142,6 +155,7 @@ impl DictationClip {
             tail_samples: 0,
             press_samples: 0,
             timeline: ClipTimeline::default(),
+            audio_start: None,
             source: None,
             stream: None,
             #[cfg(target_os = "macos")]
@@ -894,6 +908,21 @@ impl DictationCapture {
             max_chunk_gap: recording.max_chunk_gap,
         };
         let pre_press = recording.pre_press;
+        // The clip's first sample belongs to the moment the microphone
+        // timeline was at `press + press_lead_ms`, minus the kept pre-roll.
+        // Audio that had not yet reached the press starts earlier by that
+        // lag.
+        let audio_start = recording
+            .started_at
+            .checked_sub(pre_press)
+            .and_then(|start| {
+                let lag = recording.press_lead_ms.unwrap_or(0);
+                if lag < 0 {
+                    start.checked_sub(Duration::from_millis((-lag) as u64))
+                } else {
+                    Some(start)
+                }
+            });
         #[cfg(target_os = "macos")]
         let capture = recording.capture.take();
         let samples = recording.finish(Some(ended_at + tail));
@@ -901,6 +930,7 @@ impl DictationCapture {
             tail_samples: samples_for(kept_tail, PARAKEET_SAMPLE_RATE).min(samples.len()),
             press_samples: samples_for(pre_press, PARAKEET_SAMPLE_RATE).min(samples.len()),
             timeline,
+            audio_start,
             source: None,
             samples,
             stream,

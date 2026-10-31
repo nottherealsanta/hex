@@ -59,6 +59,9 @@ fn main() {
     println!("cargo:rustc-link-arg=-Wl,-weak_framework,FoundationModels");
     compile_swift_bridge("calendar", "HEXCalendarBridge", &[]);
     println!("cargo:rustc-link-lib=framework=EventKit");
+    // CoreMotion's headphone motion exists from macOS 14; Hex's floor is 15.
+    compile_swift_bridge("motion_bridge", "HEXMotionBridge", &[]);
+    println!("cargo:rustc-link-lib=framework=CoreMotion");
     compile_permission_guide();
     println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
     for runtime in ["swift-5.5/macosx", "swift/macosx"] {

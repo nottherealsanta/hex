@@ -31,6 +31,7 @@ Feature             Pane  Toggle (settings.json, hex settings)   On: what it doe
 ├── Second dictation shortcut no labs.second_dictation_shortcut + second_dictation_hotkey (macOS)
 │                                        another shortcut dictates like the main one (#627); General shows its recorder while on
 ├── Smart spacing   no    labs.smart_spacing           (macOS)   a dictation pasted right after a word gets one leading space (#632)
+├── AirPods training data no labs.airpods_training     (macOS)   each dictation's AirPods head motion, with its text, is kept as training data (training-data.md)
 └── Terminal paste  no    paste_with_shift             (Windows) paste with Ctrl+Shift+V (#477/#478; Linux keeps it in General)
 
 Settings › Labs                          // labs.page
@@ -67,6 +68,7 @@ playground only after Hex restarts.
 Gate a Labs feature where its work starts (the worker, thread, or capture),
 not only where its UI appears: `labs::live_text()`, `labs::live_chapters()`,
 `labs::playground()`, `labs::vocabulary_biasing()`,
+`labs::airpods_training()`,
 `app_settings::meetings_enabled()`, or `app_settings::hex_microphone_enabled()`.
 Add a new feature to `labs::Feature` (name, settings key, description), give
 it a row in `rune_ui/labs.rs` and a `hex settings` key, and default it off.

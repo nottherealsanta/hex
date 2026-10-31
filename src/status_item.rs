@@ -35,6 +35,11 @@ pub enum StatusItemAction {
     ToggleOverlaysInRecordings,
     /// The update item: check, download, or restart into an update.
     Update,
+    /// Labs › AirPods training data: discard the newest example.
+    DiscardTrainingExample,
+    OpenTrainingFolder,
+    /// Deletes every training example.
+    DeleteTrainingData,
     Quit,
 }
 
@@ -126,6 +131,30 @@ objc2::define_class!(
                 .try_send(StatusItemAction::Update);
         }
 
+        #[unsafe(method(discardTrainingExample:))]
+        fn discard_training_example(&self, _sender: &AnyObject) {
+            let _ = self
+                .ivars()
+                .actions
+                .try_send(StatusItemAction::DiscardTrainingExample);
+        }
+
+        #[unsafe(method(openTrainingFolder:))]
+        fn open_training_folder(&self, _sender: &AnyObject) {
+            let _ = self
+                .ivars()
+                .actions
+                .try_send(StatusItemAction::OpenTrainingFolder);
+        }
+
+        #[unsafe(method(deleteTrainingData:))]
+        fn delete_training_data(&self, _sender: &AnyObject) {
+            let _ = self
+                .ivars()
+                .actions
+                .try_send(StatusItemAction::DeleteTrainingData);
+        }
+
         #[unsafe(method(quit:))]
         fn quit(&self, _sender: &AnyObject) {
             let _ = self.ivars().actions.try_send(StatusItemAction::Quit);
@@ -167,6 +196,12 @@ struct StatusItemController {
     model_preparing: Retained<NSMenuItem>,
     model_cancel: Retained<NSMenuItem>,
     model_error: Retained<NSMenuItem>,
+    /// Labs › AirPods training data: the submenu, its count, and its two
+    /// destructive items.
+    training_section: Retained<NSMenuItem>,
+    training_status: Retained<NSMenuItem>,
+    training_discard: Retained<NSMenuItem>,
+    training_delete: Retained<NSMenuItem>,
 }
 
 thread_local! {
@@ -284,6 +319,40 @@ pub fn install() -> Result<Receiver<StatusItemAction>> {
     model_error.setHidden(true);
     add_item(&models, &target, "Manage Models…", sel!(openModels:), mtm);
     menu.addItem(&NSMenuItem::separatorItem(mtm));
+    // Labs › AirPods training data: today's count, discard last, the folder,
+    // and delete all. The whole submenu is hidden while the Labs switch is
+    // off (see `update_training`).
+    let training_menu =
+        NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str("Training Data"));
+    let training_section = plain_item("Training Data", mtm);
+    training_section.setSubmenu(Some(&training_menu));
+    menu.addItem(&training_section);
+    let training_status = plain_item("Nothing collected today", mtm);
+    training_status.setEnabled(false);
+    training_menu.addItem(&training_status);
+    let training_discard = add_item(
+        &training_menu,
+        &target,
+        "Discard Last Example",
+        sel!(discardTrainingExample:),
+        mtm,
+    );
+    add_item(
+        &training_menu,
+        &target,
+        "Open Training Folder",
+        sel!(openTrainingFolder:),
+        mtm,
+    );
+    let training_delete = add_item(
+        &training_menu,
+        &target,
+        "Delete All Training Data",
+        sel!(deleteTrainingData:),
+        mtm,
+    );
+    training_delete.setHidden(true);
+    training_section.setHidden(true);
     let update = if crate::updater::managed_by_policy() {
         // An item without an action is shown disabled.
         menu.addItem(&plain_item(crate::updater::MANAGED_LABEL, mtm));
@@ -341,6 +410,10 @@ pub fn install() -> Result<Receiver<StatusItemAction>> {
             model_preparing,
             model_cancel,
             model_error,
+            training_section,
+            training_status,
+            training_discard,
+            training_delete,
         });
     });
     Ok(receiver)
@@ -608,6 +681,38 @@ pub fn update_meeting(state: &crate::meeting_watcher::MeetingMenuState, enabled:
             button.setImage(Some(symbol));
             *button_state = (menu.button_title, menu.recording);
         }
+    });
+}
+
+/// Mirrors Labs › AirPods training data into the menu bar: today's count
+/// while the switch is on, and the two ways to remove what was kept.
+pub fn update_training(enabled: bool) {
+    let today = if enabled {
+        crate::training_store::today()
+    } else {
+        crate::training_store::Today::default()
+    };
+    STATUS_ITEM.with(|controller| {
+        let controller = controller.borrow();
+        let Some(controller) = controller.as_ref() else {
+            return;
+        };
+        controller.training_section.setHidden(!enabled);
+        if !enabled {
+            return;
+        }
+        let status = match today.examples {
+            0 => "Nothing collected today".to_owned(),
+            examples => format!(
+                "Collected today: {examples} examples · {:.0} min",
+                (today.seconds / 60.0).max(1.0)
+            ),
+        };
+        controller
+            .training_status
+            .setTitle(&NSString::from_str(&status));
+        controller.training_discard.setEnabled(today.examples > 0);
+        controller.training_delete.setEnabled(today.examples > 0);
     });
 }
 

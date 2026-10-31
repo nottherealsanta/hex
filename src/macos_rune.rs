@@ -70,6 +70,9 @@ const PUMP_INTERVAL: f64 = 0.016;
 const LAUNCH_SETUP_DEADLINE: f64 = 1.0;
 const MODEL_MENU_REFRESH: Duration = Duration::from_secs(1);
 const MEETING_MENU_REFRESH: Duration = Duration::from_millis(500);
+/// Today's training count changes only when a dictation is saved, but the
+/// store scan is not free, so the menu reads it less often.
+const TRAINING_MENU_REFRESH: Duration = Duration::from_secs(5);
 /// 'aevt' / 'rapp': the Apple event LaunchServices sends when the app is
 /// opened again while it runs (Dock, Finder, `open`).
 const CORE_EVENT_CLASS: u32 = u32::from_be_bytes(*b"aevt");
@@ -484,6 +487,7 @@ pub fn run(shutdown: &'static AtomicBool, listener: ListenerConfig) -> Result<()
         meeting_waiters: Vec::new(),
         meeting_state: MeetingMenuState::Idle,
         meeting_menu_at: Instant::now(),
+        training_menu_at: Instant::now(),
         model_menu_at: Instant::now(),
         show_dock_icon: settings.show_dock_icon,
     };
@@ -810,6 +814,7 @@ struct Pump {
     meeting_waiters: Vec<control::MeetingWaiter>,
     meeting_state: MeetingMenuState,
     meeting_menu_at: Instant,
+    training_menu_at: Instant,
     model_menu_at: Instant,
     show_dock_icon: bool,
 }
@@ -1056,6 +1061,10 @@ impl Pump {
             crate::status_item::update_software(&update_status());
             self.meeting_menu_at = now + MEETING_MENU_REFRESH;
         }
+        if now >= self.training_menu_at {
+            crate::status_item::update_training(crate::labs::airpods_training());
+            self.training_menu_at = now + TRAINING_MENU_REFRESH;
+        }
     }
 
     fn runtime_cancel(&self) {
@@ -1118,6 +1127,32 @@ impl Pump {
                 }
             }
             StatusItemAction::OpenMeetings => show(&self.window, Destination::Meetings(None)),
+            StatusItemAction::DiscardTrainingExample => {
+                match crate::training_store::discard_last() {
+                    Ok(Some(discarded)) => {
+                        tracing::info!(text = %discarded.meta.text, "discarded the last training example")
+                    }
+                    Ok(None) => {}
+                    Err(error) => tracing::warn!(%error, "could not discard a training example"),
+                }
+                // Refresh the count at the next tick.
+                self.training_menu_at = Instant::now()
+                    .checked_sub(TRAINING_MENU_REFRESH)
+                    .unwrap_or_else(Instant::now);
+            }
+            StatusItemAction::OpenTrainingFolder => {
+                let opened = crate::training_store::root().and_then(|folder| {
+                    std::fs::create_dir_all(&folder)?;
+                    crate::opencode_catalog::open_url(&folder.display().to_string())
+                });
+                if let Err(error) = opened {
+                    tracing::warn!(%error, "could not open the training folder");
+                }
+            }
+            StatusItemAction::DeleteTrainingData => match crate::training_store::purge() {
+                Ok(removed) => tracing::info!(removed, "deleted every training example"),
+                Err(error) => tracing::warn!(%error, "could not delete the training examples"),
+            },
             #[cfg(hex_capture)]
             StatusItemAction::ToggleOverlaysInRecordings => self.toggle_overlays_in_recordings(),
             StatusItemAction::Quit => {
