@@ -1859,6 +1859,8 @@ fn finish_dictation_with(
     let clip = match capture.finish_with_tail(ended_at, tail)? {
         Finish::Transcribe(clip) if !clip.is_near_silent() => clip,
         finish => {
+            // A clip that never reaches the worker keeps no motion either.
+            crate::motion::abort();
             events.dictation(DictationPhase::Discarded, "")?;
             if let Some(indicator) = indicator {
                 indicator.send(DictationIndicatorEvent::Discarded);
@@ -1894,6 +1896,7 @@ fn finish_dictation_with(
             Ok(FinishResult::Submitted)
         }
         Err(error) => {
+            crate::motion::abort();
             feedback::play(Tone::Error);
             events.dictation(DictationPhase::Failed(error.into()), "")?;
             if let Some(indicator) = indicator {
