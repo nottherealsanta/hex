@@ -101,4 +101,5 @@ signal.
 
 A saved example proves the pipeline, not the model: spoken dictation is not
 silent mouthing, which is why the project's go/no-go point evaluates on the
-Subvox app's silent clips (see `speechless/docs/HEX_FORK_PLAN.md`).
+Speechless app's silent clips (see `../docs/HEX_FORK_PLAN.md` in the Speechless
+checkout this fork sits inside).

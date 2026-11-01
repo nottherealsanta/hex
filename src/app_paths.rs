@@ -12,16 +12,26 @@ pub fn is_local_build() -> bool {
     option_env!("HEX_LOCAL_BUILD") == Some("1")
 }
 
-/// Whether this is a macOS `Hex Test.app` build (`HEX_TEST_BUILD=1`), which
-/// keeps its data, settings, and user config apart from the installed Hex.
+/// Whether this is a macOS side build (`Hex Test.app` or this checkout's
+/// `Hex Speechless.app`), which keeps its data, settings, and user config
+/// apart from the installed Hex.
 pub fn is_macos_test_build() -> bool {
-    cfg!(target_os = "macos") && option_env!("HEX_TEST_BUILD") == Some("1")
+    cfg!(target_os = "macos")
+        && (option_env!("HEX_TEST_BUILD") == Some("1") || is_speechless_build())
+}
+
+/// Whether this is the Speechless experiment's own `Hex Speechless.app`
+/// (`HEX_SPEECHLESS_BUILD=1`).
+pub fn is_speechless_build() -> bool {
+    cfg!(target_os = "macos") && option_env!("HEX_SPEECHLESS_BUILD") == Some("1")
 }
 
 /// The name menus show, so a test build running beside Hex reads as itself.
 #[cfg(target_os = "macos")]
 pub fn app_name() -> &'static str {
-    if is_macos_test_build() {
+    if is_speechless_build() {
+        "Hex Speechless"
+    } else if is_macos_test_build() {
         "Hex Test"
     } else {
         "Hex"
@@ -34,7 +44,9 @@ pub fn support_dir() -> Result<PathBuf> {
     }
     let data =
         dirs::data_dir().ok_or_else(|| eyre!("application data directory is unavailable"))?;
-    let folder = if is_macos_test_build() {
+    let folder = if is_speechless_build() {
+        "hex-speechless"
+    } else if is_macos_test_build() {
         "hex-test"
     } else {
         "hex"
@@ -98,15 +110,27 @@ pub fn personal_commands_workspace() -> Result<PathBuf> {
     user_config_dir()
 }
 
-/// The per-user config folder holding `hex.config.ts` on every OS: `~/.config/hex`, or `~/.config/hex-test` for `Hex Test.app`.
+/// The per-user config folder holding `hex.config.ts` on every OS: `~/.config/hex`, or `~/.config/hex-test` for `Hex Test.app` and `~/.config/hex-speechless` for `Hex Speechless.app`.
 fn user_config_dir() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| eyre!("home directory is unavailable"))?;
-    Ok(user_config_dir_in(&home, is_macos_test_build()))
+    Ok(user_config_dir_in(
+        &home,
+        config_folder(is_speechless_build(), is_macos_test_build()),
+    ))
 }
 
-fn user_config_dir_in(home: &std::path::Path, test_build: bool) -> PathBuf {
-    home.join(".config")
-        .join(if test_build { "hex-test" } else { "hex" })
+fn config_folder(speechless_build: bool, test_build: bool) -> &'static str {
+    if speechless_build {
+        "hex-speechless"
+    } else if test_build {
+        "hex-test"
+    } else {
+        "hex"
+    }
+}
+
+fn user_config_dir_in(home: &std::path::Path, folder: &str) -> PathBuf {
+    home.join(".config").join(folder)
 }
 
 #[cfg(test)]
@@ -116,13 +140,15 @@ mod tests {
     #[test]
     fn each_build_has_its_own_config_folder() {
         let home = std::path::Path::new("/Users/kit");
-        assert_eq!(
-            user_config_dir_in(home, false),
-            home.join(".config").join("hex")
-        );
-        assert_eq!(
-            user_config_dir_in(home, true),
-            home.join(".config").join("hex-test")
-        );
+        for (speechless, test, folder) in [
+            (false, false, "hex"),
+            (false, true, "hex-test"),
+            (true, false, "hex-speechless"),
+        ] {
+            assert_eq!(
+                user_config_dir_in(home, config_folder(speechless, test)),
+                home.join(".config").join(folder)
+            );
+        }
     }
 }

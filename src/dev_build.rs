@@ -11,7 +11,7 @@ pub fn is_dev_build() -> bool {
         option_env!("HEX_TEST_BUILD"),
         option_env!("HEX_BUILD_CHANNEL"),
         crate::VERSION,
-    )
+    ) || option_env!("HEX_SPEECHLESS_BUILD") == Some("1")
 }
 
 pub(crate) fn is_dev_build_for(

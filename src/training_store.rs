@@ -5,7 +5,7 @@
 //! A folder is the unit that is saved, counted, discarded, and expired. No
 //! audio is ever written; the text is the one the user already pasted.
 //!
-//! The format matches the Subvox trainer (`speechless/training`): motion.csv
+//! The format matches the Speechless trainer (`speechless/training`): motion.csv
 //! is `t,ax,ay,az,rx,ry,rz,pitch,roll,yaw,gx,gy,gz,qw,qx,qy,qz` with `t` in
 //! seconds from the piece's start, and meta.json carries the text, the word
 //! timings relative to the piece, and the AirPods session.

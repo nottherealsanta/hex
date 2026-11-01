@@ -1,10 +1,11 @@
 # Hex Agent Guide
 
-> **This fork is a personal experiment on one Mac.** `speechless/AGENTS.md` governs it: macOS
-> only, no CI, no goldens, no Linux or Windows work, no PR flow, and every capability is judged by
-> a real dictation on this Mac. Where the rest of this guide says otherwise (Linux goldens, PRs to
-> `dev`, updating an installed copy, platform contracts), this paragraph wins. Milestones live in
-> `speechless/docs/HEX_FORK_PLAN.md`.
+> **This fork is a personal experiment on one Mac.** `../AGENTS.md` (the Speechless checkout this
+> fork sits inside) governs it: macOS only, no CI, no goldens, no Linux or Windows work, no PR
+> flow, and every capability is judged by a real dictation on this Mac. Where the rest of this
+> guide says otherwise (Linux goldens, PRs to `dev`, updating an installed copy, platform
+> contracts), this paragraph wins. Milestones live in `../docs/HEX_FORK_PLAN.md`. The app this
+> checkout builds is `Hex Speechless.app`: `HEX_SPEECHLESS_BUILD=1 scripts/build-app.sh`.
 
 ## Private Kit Tool
 

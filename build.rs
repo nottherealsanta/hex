@@ -132,8 +132,10 @@ fn build_version() {
 fn test_build_commit() {
     println!("cargo:rerun-if-env-changed=HEX_BUILD_CHANNEL");
     println!("cargo:rerun-if-env-changed=HEX_TEST_BUILD");
+    println!("cargo:rerun-if-env-changed=HEX_SPEECHLESS_BUILD");
     println!("cargo:rerun-if-env-changed=HEX_LOCAL_BUILD");
     if std::env::var("HEX_TEST_BUILD").as_deref() != Ok("1")
+        && std::env::var("HEX_SPEECHLESS_BUILD").as_deref() != Ok("1")
         && std::env::var("HEX_LOCAL_BUILD").as_deref() != Ok("1")
     {
         return;

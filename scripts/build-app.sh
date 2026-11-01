@@ -6,6 +6,10 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # HEX_TEST_BUILD=1 builds the CI test app: ad-hoc signed, under its own
 # name and bundle ID so it installs beside the released Hex and never
 # touches its permissions; it never checks for updates.
+# HEX_SPEECHLESS_BUILD=1 builds this checkout's own app for the Speechless
+# experiment: ad-hoc signed, `Hex Speechless.app` (anomaly.hex.speechless),
+# with its own data, settings, and `hex-speechless` config folder. It never
+# checks for updates and installs beside a released Hex.
 # HEX_LOCAL_BUILD=1 marks a build made from a checkout for its owner's own
 # machine (Developer ID signed as usual): it shows "Local build · updates off"
 # with its commit and never checks for or offers updates.
@@ -17,6 +21,11 @@ if [ "${HEX_RELEASE_UNSIGNED:-}" = 1 ]; then
   identity=-
   app_name=Hex
   bundle_id=anomaly.hex
+elif [ "${HEX_SPEECHLESS_BUILD:-}" = 1 ]; then
+  team_id=
+  identity=-
+  app_name="Hex Speechless"
+  bundle_id=anomaly.hex.speechless
 elif [ "${HEX_TEST_BUILD:-}" = 1 ]; then
   team_id=
   identity=-
@@ -54,10 +63,10 @@ export MACOSX_DEPLOYMENT_TARGET=15.0
 # Cargo may run through a wrapper that does not forward the environment (Kit's
 # HiveMind-backed cargo), so build-time variables also travel as --config.
 env_args=()
-if [ -z "${HEX_COMMIT:-}" ] && { [ "${HEX_LOCAL_BUILD:-}" = 1 ] || [ "${HEX_TEST_BUILD:-}" = 1 ]; }; then
+if [ -z "${HEX_COMMIT:-}" ] && { [ "${HEX_LOCAL_BUILD:-}" = 1 ] || [ "${HEX_TEST_BUILD:-}" = 1 ] || [ "${HEX_SPEECHLESS_BUILD:-}" = 1 ]; }; then
   HEX_COMMIT=$(git -C "$root" rev-parse --short=7 HEAD 2>/dev/null || true)
 fi
-for name in HEX_LOCAL_BUILD HEX_TEST_BUILD HEX_COMMIT HEX_BUILD_CHANNEL; do
+for name in HEX_LOCAL_BUILD HEX_TEST_BUILD HEX_SPEECHLESS_BUILD HEX_COMMIT HEX_BUILD_CHANNEL; do
   value=${!name:-}
   if [ -n "$value" ]; then
     case "$value" in
@@ -87,6 +96,7 @@ plutil -replace CFBundleDisplayName -string "$app_name" "$bundle/Contents/Info.p
 # scheme never opens the installed Hex.
 url_scheme=hex
 [ "${HEX_TEST_BUILD:-}" = 1 ] && url_scheme=hex-test
+[ "${HEX_SPEECHLESS_BUILD:-}" = 1 ] && url_scheme=hex-speechless
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName $bundle_id" "$bundle/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $url_scheme" "$bundle/Contents/Info.plist"
 # The helper mirrors a cabled iPhone as a camera; macOS asks on Hex's behalf.

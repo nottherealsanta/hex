@@ -1658,6 +1658,7 @@ fn version_line(ui: &Ui, p: Paint, version: El) -> El {
         BuildKind::Release => return version,
         BuildKind::Local => tr("Local"),
         BuildKind::Test => tr("Test"),
+        BuildKind::Speechless => tr("Speechless"),
     };
     let c = &p.k.c;
     row()
@@ -1695,10 +1696,13 @@ enum BuildKind {
     Release,
     Local,
     Test,
+    Speechless,
 }
 
 fn build_kind() -> BuildKind {
-    if crate::app_paths::is_local_build() {
+    if crate::app_paths::is_speechless_build() {
+        BuildKind::Speechless
+    } else if crate::app_paths::is_local_build() {
         BuildKind::Local
     } else if option_env!("HEX_TEST_BUILD") == Some("1") {
         BuildKind::Test
