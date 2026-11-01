@@ -386,6 +386,8 @@ pub(crate) struct DotUniforms {
     shadow: [f32; 4],
     plate_layout: [f32; 4],
     island: [f32; 4],
+    /// The field's corner radius, the motion indicator's presence, and two
+    /// spare slots.
     field: [f32; 4],
 }
 
@@ -442,7 +444,7 @@ impl DotUniforms {
             island: layout
                 .island
                 .map_or([0.0; 4], |island| island_shape(island, pose)),
-            field: [field_radius(layout, pose), 0.0, 0.0, 0.0],
+            field: [field_radius(layout, pose), frame.motion, 0.0, 0.0],
         }
     }
 }

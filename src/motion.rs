@@ -21,6 +21,11 @@ pub const LOOK_BACK: Duration = Duration::from_millis(500);
 /// capture is stopped rather than left recording.
 const WATCHDOG: Duration = Duration::from_secs(300);
 
+/// A sample this recent means the stream is delivering. CoreMotion sends at
+/// about 25 Hz, so a connected pair that sends nothing for this long is
+/// quiet, not late.
+const FLOWING_WITHIN: Duration = Duration::from_millis(500);
+
 /// One CoreMotion sample. Times are `mach_absolute_time` nanoseconds, the
 /// same clock as [`CaptureInstant`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -187,6 +192,25 @@ pub fn abort() {
     }
 }
 
+/// Whether CoreMotion is delivering samples for the open capture, for the
+/// HUD's motion indicator. `None` when no capture is open (the feature is off,
+/// or the dictation is over), so the HUD clears the indicator.
+pub fn live() -> Option<bool> {
+    WATCHING
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .as_ref()?;
+    Some(
+        platform::newest_sample()
+            .is_some_and(|newest| flowing(CaptureInstant::now().as_nanos(), newest)),
+    )
+}
+
+/// A sample this recent means the stream is delivering now.
+fn flowing(now_ns: u64, newest_ns: u64) -> bool {
+    now_ns.saturating_sub(newest_ns) <= FLOWING_WITHIN.as_nanos() as u64
+}
+
 /// Ends the open capture. With the clip's real audio window, returns the
 /// motion covering it, padded by [`LOOK_BACK`] at the front; without one,
 /// drops whatever was kept.
@@ -323,6 +347,7 @@ mod platform {
         fn hex_motion_session() -> u64;
         fn hex_motion_error() -> *mut std::ffi::c_char;
         fn hex_motion_samples(from: f64, to: f64) -> *mut std::ffi::c_char;
+        fn hex_motion_newest_sample() -> f64;
         fn hex_motion_free_string(string: *mut std::ffi::c_char);
     }
 
@@ -369,6 +394,13 @@ mod platform {
 
     pub(super) fn stop() {
         unsafe { hex_motion_stop() }
+    }
+
+    /// The newest buffered sample's time, ns: the buffer holds only the open
+    /// capture, because `start` clears it.
+    pub(super) fn newest_sample() -> Option<u64> {
+        let newest = unsafe { hex_motion_newest_sample() };
+        (newest > 0.0).then_some(newest as u64)
     }
 
     pub(super) fn samples(from: u64, to: u64) -> Vec<MotionSample> {
@@ -425,6 +457,10 @@ mod platform {
 
     pub(super) fn stop() {}
 
+    pub(super) fn newest_sample() -> Option<u64> {
+        None
+    }
+
     pub(super) fn samples(_from: u64, _to: u64) -> Vec<MotionSample> {
         Vec::new()
     }
@@ -456,6 +492,18 @@ mod tests {
         };
         assert!((window.hertz() - 25.0).abs() < 0.01);
         assert_eq!(window.duration(), Duration::from_millis(960));
+    }
+
+    #[test]
+    fn a_quiet_stream_is_not_flowing() {
+        let newest = 10_000_000_000;
+        assert!(flowing(newest + 80_000_000, newest));
+        // One CoreMotion update late is late; half a second of nothing is a
+        // pair that stopped sending.
+        assert!(flowing(newest + 500_000_000, newest));
+        assert!(!flowing(newest + 501_000_000, newest));
+        // A sample stamped after now (the clock moved under us) still counts.
+        assert!(flowing(newest - 1_000_000, newest));
     }
 
     #[test]

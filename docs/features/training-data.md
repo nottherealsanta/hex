@@ -13,6 +13,9 @@ Labs > AirPods training data (off)          // labs.md: labs.airpods_training
 Hold Option                                  // the ordinary dictation capture
 ├── motion_bridge.swift starts CoreMotion headphone motion
 │   └── no AirPods, or no motion permission -> nothing kept (dictation unchanged)
+├── the HUD shows a dot under Dot scope's plate while samples arrive
+│   └── motion.rs::live -> a fading mark; a connected pair that sends nothing
+│       leaves it dark, so a capture that is not collecting shows at a glance
 └── Capture, transcription, paste run exactly as before
 
 Release Option
@@ -73,7 +76,8 @@ signal.
 - Nothing records between dictations: motion updates run from the shortcut
   press to the release, with a five-minute watchdog.
 - No Hex Meetings, Annotate, or voice notes contribute data.
-- The HUD shows no motion indicator yet (see the plan's milestone M4).
+- The HUD's motion mark is the only visible sign: the menu bar count, the
+  folder, and `hex training status` say nothing while a dictation records.
 
 ## Checks
 
@@ -81,6 +85,9 @@ signal.
   words, sentence and long-piece slicing without overlap, coverage, the
   speech-to-motion offset, and a whole synthetic dictation saved as one
   example or as four pieces sharing a dictation id.
+- `src/motion.rs` and `src/dictation_indicator.rs` tests: a stream counts as
+  flowing within half a second of its newest sample, the HUD mark fades in
+  and out, Reduce Motion switches it, and a release clears it.
 - `src/training_store.rs` tests: folder round trip, discard last, purge,
   retention by size, and an incomplete folder never counting as an example.
 - `scripts/check training` runs them all.

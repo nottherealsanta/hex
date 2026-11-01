@@ -21,6 +21,9 @@ const PROCESSING_MIN_DURATION: Duration = Duration::from_millis(200);
 /// 0.3 s wipe, so the collapse and the wipe end together.
 const COMPLETED_VISIBLE_DURATION: Duration = Duration::from_millis(100);
 const FAILED_VISIBLE_DURATION: Duration = Duration::from_millis(600);
+/// How long the motion indicator takes to fade in or out, s. A stream that
+/// drops one sample reads as flowing, so the mark does not flash.
+const MOTION_FADE: Duration = Duration::from_millis(180);
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone, Copy, Debug)]
@@ -38,6 +41,12 @@ pub enum DictationIndicatorEvent {
         // `input_level` instead.
         #[allow(dead_code)]
         peak: f32,
+    },
+    /// Labs › AirPods training data: whether the capture's motion stream is
+    /// delivering samples, for the HUD's motion indicator. Sent with each
+    /// meter while a dictation records; absent when the feature is off.
+    Motion {
+        flowing: bool,
     },
     Submitted {
         job_id: u64,
@@ -181,6 +190,9 @@ pub struct DotFrame {
     pub rows: usize,
     /// (brightness, freshness) per dot, row by row, as normalized u16s.
     pub dots: Vec<[u16; 2]>,
+    /// How much the motion indicator shows: 0 for none, 1 while the capture's
+    /// AirPods motion is arriving.
+    pub motion: f32,
 }
 
 /// The middle of `rune_hud.wgsl`'s fade of dots near the field's edge
@@ -239,6 +251,10 @@ pub struct IndicatorModel {
     loudness: f32,
     /// HUD Lab's synthetic voice and how far into it Dot scope is.
     demo_voice: Option<f32>,
+    /// Labs › AirPods training data: whether motion is arriving, and how much
+    /// the indicator shows, faded between the two.
+    motion_flowing: bool,
+    motion: f32,
     /// Since an event, until a step finds everything settled out of sight.
     active: bool,
 }
@@ -258,6 +274,8 @@ impl IndicatorModel {
             island: None,
             loudness: SILENT,
             demo_voice: None,
+            motion_flowing: false,
+            motion: 0.0,
             active: false,
         }
     }
@@ -293,6 +311,8 @@ impl IndicatorModel {
                 self.completion_pending = false;
                 self.loudness = SILENT;
                 self.demo_voice = None;
+                self.motion_flowing = false;
+                self.motion = 0.0;
             }
             DictationIndicatorEvent::ConfigureDotScope(tuning) => {
                 self.tuning = tuning;
@@ -311,9 +331,14 @@ impl IndicatorModel {
                 self.loudness = SILENT;
                 self.stage = Stage::Recording;
                 self.scope.restart(reduce);
+                self.motion_flowing = false;
+                self.motion = 0.0;
             }
             DictationIndicatorEvent::Meter { average, .. } => {
                 self.loudness = dot_scope::loudness(average);
+            }
+            DictationIndicatorEvent::Motion { flowing } => {
+                self.motion_flowing = flowing && self.capturing;
             }
             DictationIndicatorEvent::Submitted { job_id } => {
                 self.capturing = false;
@@ -349,6 +374,7 @@ impl IndicatorModel {
 
     fn finish_capture(&mut self, now: Instant, empty_phase: Phase) {
         self.capturing = false;
+        self.motion_flowing = false;
         if !matches!(empty_phase, Phase::Hidden) {
             self.phase_started = now;
         }
@@ -423,6 +449,19 @@ impl IndicatorModel {
             }
             None => self.loudness,
         };
+        // The motion indicator follows the stream with a short fade; Reduce
+        // Motion switches it instead.
+        let target = if self.motion_flowing && self.capturing {
+            1.0
+        } else {
+            0.0
+        };
+        self.motion = if reduce {
+            target
+        } else {
+            let step = dt / MOTION_FADE.as_secs_f32();
+            self.motion + (target - self.motion).clamp(-step, step)
+        };
         self.scope.advance(
             dt,
             dot_scope::Frame {
@@ -432,7 +471,7 @@ impl IndicatorModel {
                 reduce_motion: reduce,
             },
         );
-        self.active = visible || !self.scope.settled();
+        self.active = visible || !self.scope.settled() || self.motion > 0.0;
         DotFrame {
             pose: self.scope.pose(),
             tuning: self.scope.tuning(),
@@ -444,6 +483,7 @@ impl IndicatorModel {
                 .iter()
                 .map(|value| value.map(|v| (v.clamp(0.0, 1.0) * 65535.0).round() as u16))
                 .collect(),
+            motion: self.motion,
         }
     }
 }
@@ -504,6 +544,71 @@ mod tests {
 
     /// A hot Linux microphone speaks near −18 dBFS RMS, which a fixed gain
     /// pins at full, so the HUD sat still: the auto level keeps it moving.
+    /// Labs › AirPods training data: the mark under the plate follows the
+    /// stream, and leaves when the capture ends however the last report read.
+    #[test]
+    fn the_motion_indicator_follows_the_stream_and_leaves_with_the_capture() {
+        let start = Instant::now();
+        let mut model = IndicatorModel::new(Tuning::default(), start);
+        model.handle(DictationIndicatorEvent::Started, start, false);
+        assert_eq!(
+            model.step(at(start, 0.0), 1.0 / 60.0, false).motion,
+            0.0,
+            "nothing shows before a report"
+        );
+
+        model.handle(
+            DictationIndicatorEvent::Motion { flowing: true },
+            at(start, 0.1),
+            false,
+        );
+        let frames = run(&mut model, start, 0.1, 0.4);
+        assert!(frames.last().unwrap().motion > 0.98, "faded in");
+
+        model.handle(
+            DictationIndicatorEvent::Motion { flowing: false },
+            at(start, 0.5),
+            false,
+        );
+        let frames = run(&mut model, start, 0.5, 0.4);
+        assert!(frames.last().unwrap().motion < 0.01, "faded out");
+
+        // The release ends the capture: the mark goes even when the last
+        // report still read as flowing.
+        model.handle(
+            DictationIndicatorEvent::Motion { flowing: true },
+            at(start, 0.9),
+            false,
+        );
+        run(&mut model, start, 0.9, 0.3);
+        model.handle(
+            DictationIndicatorEvent::Submitted { job_id: 1 },
+            at(start, 1.2),
+            false,
+        );
+        let frames = run(&mut model, start, 1.2, 0.3);
+        assert_eq!(frames.last().unwrap().motion, 0.0);
+    }
+
+    #[test]
+    fn reduce_motion_switches_the_motion_indicator() {
+        let start = Instant::now();
+        let mut model = IndicatorModel::new(Tuning::default(), start);
+        model.handle(DictationIndicatorEvent::Started, start, true);
+        model.handle(
+            DictationIndicatorEvent::Motion { flowing: true },
+            start,
+            true,
+        );
+        assert_eq!(model.step(at(start, 0.0), 1.0 / 60.0, true).motion, 1.0);
+        model.handle(
+            DictationIndicatorEvent::Motion { flowing: false },
+            start,
+            true,
+        );
+        assert_eq!(model.step(at(start, 0.1), 1.0 / 60.0, true).motion, 0.0);
+    }
+
     #[test]
     fn a_hot_microphone_still_moves_the_scope() {
         let start = Instant::now();

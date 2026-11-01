@@ -23,6 +23,11 @@ fn indicator_vertex(@builtin(vertex_index) vertex_id: u32) -> Varyings {
     return Varyings(vec4f(p, 0.0, 1.0), vec2f(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5));
 }
 
+// The motion indicator's gap below the plate (or island), pt.
+const MOTION_GAP: f32 = 9.0;
+// The motion indicator's radius, pt.
+const MOTION_RADIUS: f32 = 2.4;
+
 fn sstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
     return t * t * (3.0 - 2.0 * t);
@@ -96,7 +101,8 @@ struct DotUniforms {
     // The island's half width, height, top edge, and bottom radius, pt.
     island: vec4f,
     // The field's corner radius, pt: half its height on a plate, the
-    // island's corners less its padding in an island.
+    // island's corners less its padding in an island. `y` is the motion
+    // indicator's presence (0 to 1, faded); the other slots are spare.
     field: vec4f,
 }
 
@@ -209,6 +215,23 @@ fn dot_scope_fragment(in: Varyings) -> @location(0) vec4f {
             }
             composite(&result, color, alpha * mask * shape * coverage(from_center - dot_radius, aa));
         }
+    }
+
+    // Labs › AirPods training data: a small dot under the plate while the
+    // capture's AirPods motion is arriving, so a silent capture shows.
+    if (u.field.y > 0.001) {
+        let bottom = select(
+            u.plate_layout.y + half_size.y * scale,
+            u.island.z + u.island.y,
+            in_island);
+        let at = window_point - vec2f(u.plate_layout.x, bottom + MOTION_GAP);
+        let window_aa = aa * scale;
+        let distance = length(at) - MOTION_RADIUS;
+        composite(&result, u.core.rgb, 0.72 * u.field.y * coverage(distance, window_aa));
+        composite(
+            &result,
+            u.core.rgb,
+            0.16 * u.field.y * coverage(distance - MOTION_RADIUS * 1.2, window_aa * 2.0));
     }
 
     result *= u.opacity;

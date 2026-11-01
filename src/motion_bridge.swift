@@ -232,6 +232,16 @@ public func hexMotionSamples(_ from: Double, _ to: Double) -> UnsafeMutablePoint
     return strdup(String(decoding: data, as: UTF8.self))
 }
 
+/// The newest buffered sample's time in nanoseconds, or 0 when the buffer is
+/// empty; the HUD's motion indicator polls this to tell a live stream from a
+/// connected pair that sends nothing.
+@_cdecl("hex_motion_newest_sample")
+public func hexMotionNewestSample() -> Double {
+    lock.lock()
+    defer { lock.unlock() }
+    return samples.last?.t ?? 0
+}
+
 @_cdecl("hex_motion_free_string")
 public func hexMotionFreeString(_ string: UnsafeMutablePointer<CChar>?) {
     free(string)

@@ -1192,6 +1192,11 @@ pub fn listen(
             && let Some(indicator) = &indicator
         {
             indicator.meter(&audio.samples);
+            // Labs › AirPods training data: the HUD's motion indicator.
+            // `None` when the feature is off, so the HUD shows nothing.
+            if let Some(flowing) = crate::motion::live() {
+                indicator.send(DictationIndicatorEvent::Motion { flowing });
+            }
         }
     }
 

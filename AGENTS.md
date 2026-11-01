@@ -342,7 +342,8 @@ substitute for source inspection or a second roadmap.
 - `motion`, `training_capture`, `training_store`: Labs › AirPods training
   data (macOS). `motion_bridge.swift` wraps CoreMotion's headphone motion and
   `motion` starts and stops it around a capture, reading one clip's window
-  out of the Swift buffer; `training_capture` turns a successful paste into
+  out of the Swift buffer and telling the HUD (a dot under Dot scope's plate)
+  while samples are arriving; `training_capture` turns a successful paste into
   examples (a word pass as engine background work, sentence and long-piece
   slicing, per-piece quality and a once-per-AirPods-session clock self-check);
   `training_store` is the owner-only `Training` folder (one folder per
