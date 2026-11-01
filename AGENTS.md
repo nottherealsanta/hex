@@ -1,5 +1,11 @@
 # Hex Agent Guide
 
+> **This fork is a personal experiment on one Mac.** `speechless/AGENTS.md` governs it: macOS
+> only, no CI, no goldens, no Linux or Windows work, no PR flow, and every capability is judged by
+> a real dictation on this Mac. Where the rest of this guide says otherwise (Linux goldens, PRs to
+> `dev`, updating an installed copy, platform contracts), this paragraph wins. Milestones live in
+> `speechless/docs/HEX_FORK_PLAN.md`.
+
 ## Private Kit Tool
 
 `dev` and `production` take changes only through pull requests (Dax's
